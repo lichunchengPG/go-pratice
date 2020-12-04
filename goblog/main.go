@@ -1,18 +1,54 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
+	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 	"html/template"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 	"unicode/utf8"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 
 var router = mux.NewRouter()
+var db *sql.DB
 
+func initDB() {
+	var err error
+	config := mysql.Config{
+		User:                 "homestead",
+		Passwd:               "secret",
+		Addr:                 "192.168.10.10",
+		Net:                  "tcp",
+		DBName:               "goblog",
+		AllowNativePasswords: true,
+	}
+	// 准备数据库连接池
+	db, err := sql.Open("mysql", config.FormatDSN())
+	checkError(err)
+	// 设置最大连接数
+	db.SetMaxOpenConns(25)
+	// 设置最大空闲连接数
+	db.SetMaxIdleConns(25)
+	// 设置每个链接的过期时间
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	// 尝试连接，失败会报错
+	err = db.Ping()
+	checkError(err)
+}
+
+func checkError(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 type ArticleFormData struct {
 	Title, Body string
 	URL *url.URL
@@ -91,28 +127,7 @@ func articlesStoreHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "body 的值为: %v <br>", body)
 		fmt.Fprintf(w, "body 的长度为: %v <br>", utf8.RuneCountInString(body))
 	} else {
-//		html := `
-//<!DOCTYPE html>
-//<html lang="en">
-//<head>
-//    <title>创建文章 —— 我的技术博客</title>
-//    <style type="text/css">.error {color: red;}</style>
-//</head>
-//<body>
-//    <form action="{{ .URL }}" method="post">
-//        <p><input type="text" name="title" value="{{ .Title }}"></p>
-//        {{ with .Errors.title }}
-//        <p class="error">{{ . }}</p>
-//        {{ end }}
-//        <p><textarea name="body" cols="30" rows="10">{{ .Body }}</textarea></p>
-//        {{ with .Errors.body }}
-//        <p class="error">{{ . }}</p>
-//        {{ end }}
-//        <p><button type="submit">提交</button></p>
-//    </form>
-//</body>
-//</html>
-//`
+
 		storeURL, _ := router.Get("articles.store").URL()
 		data := ArticleFormData {
 			Title: title,
@@ -167,6 +182,8 @@ func removeTrailingSlash(next http.Handler) http.Handler {
 }
 
 func main() {
+	initDB()
+
 	router.HandleFunc("/", defaultHandler).Name("home")
 	router.HandleFunc("/about", aboutHandler).Name("about")
 	router.HandleFunc("/articles/{id:[0-9]+}", articlesShowHandler).Methods("GET").Name("articles.show")
