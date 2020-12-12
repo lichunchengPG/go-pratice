@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 	"html/template"
 	"log"
@@ -13,13 +14,22 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-	_ "github.com/go-sql-driver/mysql"
 )
-
 
 var router = mux.NewRouter()
 var db *sql.DB
 var test string
+
+type ArticleFormData struct {
+	Title, Body string
+	URL         *url.URL
+	Errors      map[string]string
+}
+
+type Article struct {
+	Title, Body string
+	ID          int64
+}
 
 func initDB() {
 	var err error
@@ -64,15 +74,10 @@ func checkError(err error) {
 		log.Fatal(err)
 	}
 }
-type ArticleFormData struct {
-	Title, Body string
-	URL *url.URL
-	Errors map[string]string
-}
 
 func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/" {
-		fmt.Fprint(w,"<h1>Hello 欢迎欢迎</h1>")
+		fmt.Fprint(w, "<h1>Hello 欢迎欢迎</h1>")
 	} else {
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprint(w, "<h1>请求页面未找到 :(</h1>"+
@@ -80,7 +85,7 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func aboutHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w,"此博客是用以记录编程笔记，如您有反馈或建议，请联系" +
+	fmt.Fprint(w, "此博客是用以记录编程笔记，如您有反馈或建议，请联系"+
 		"<a href=\"mailto:summer@example.com\">summer@example.com</a>")
 }
 
@@ -90,10 +95,36 @@ func notFoundHandler(w http.ResponseWriter, r *http.Request) {
 		"<p>如有疑惑，请联系我们。</p>")
 }
 
-func articlesShowHandler(w http.ResponseWriter, r *http.Request)  {
+func articlesShowHandler(w http.ResponseWriter, r *http.Request) {
+	// 1. 获取 URL 参数
 	vars := mux.Vars(r)
 	id := vars["id"]
-	fmt.Fprint(w, "文章ID: " + id)
+
+	// 2. 读取对应的文章数据
+	article := Article{}
+	query := "SELECT * FROM articles WHERE id = ?"
+	err := db.QueryRow(query, id).Scan(&article.ID, &article.Title, &article.Body)
+
+	// 3. 如果出现错误
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// 3.1 数据未找到
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "404 文章未找到")
+		} else {
+			// 3.2 数据库错误
+			checkError(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "500 服务器内部错误")
+		}
+	} else {
+		// 4. 读取成功，显示文章
+		tmpl, err := template.ParseFiles("resources/views/articles/show.gohtml")
+		checkError(err)
+
+		tmpl.Execute(w, article)
+	}
+	fmt.Fprint(w, "文章ID: "+id)
 }
 
 func articlesIndexHandler(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +156,6 @@ func articlesStoreHandler(w http.ResponseWriter, r *http.Request) {
 		errors["body"] = "内容长度需大于或等于 10 个字节"
 	}
 
-
 	//fmt.Fprintf(w, "POST PostForm: %v <br>", r.PostForm)
 	//fmt.Fprintf(w, "POST Form: %v <br>", r.Form)
 	//fmt.Fprintf(w, "title 的值为: %v", title)
@@ -138,7 +168,7 @@ func articlesStoreHandler(w http.ResponseWriter, r *http.Request) {
 	if len(errors) == 0 {
 		lastInsertID, err := saveArticleToDB(title, body)
 		if lastInsertID > 0 {
-			fmt.Fprintf(w, "插入成功，ID 为" + strconv.FormatInt(lastInsertID, 10))
+			fmt.Fprintf(w, "插入成功，ID 为"+strconv.FormatInt(lastInsertID, 10))
 		} else {
 			checkError(err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -147,10 +177,10 @@ func articlesStoreHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 
 		storeURL, _ := router.Get("articles.store").URL()
-		data := ArticleFormData {
-			Title: title,
-			Body: body,
-			URL: storeURL,
+		data := ArticleFormData{
+			Title:  title,
+			Body:   body,
+			URL:    storeURL,
 			Errors: errors,
 		}
 		//tmpl, err := template.New("create-form").Parse(html)
@@ -159,7 +189,7 @@ func articlesStoreHandler(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 
-		tmpl.Execute(w,data)
+		tmpl.Execute(w, data)
 	}
 
 }
@@ -167,10 +197,10 @@ func articlesStoreHandler(w http.ResponseWriter, r *http.Request) {
 func saveArticleToDB(title string, body string) (int64, error) {
 	// 初始化变量
 	var (
-		id	int64
-		err	error
-		rs	sql.Result
-		stmt	*sql.Stmt
+		id   int64
+		err  error
+		rs   sql.Result
+		stmt *sql.Stmt
 	)
 	// 1. 获取一个 prepare 声明语句
 	stmt, err = db.Prepare("INSERT INTO articles (title, body) VALUES(?,?)")
@@ -181,7 +211,7 @@ func saveArticleToDB(title string, body string) (int64, error) {
 	// 2. 在此函数运行结束后关闭此语句，防止占用 SQL 连接
 	defer stmt.Close()
 	// 3. 执行请求，传参进入绑定的内容
-	rs, err = stmt.Exec(title,body)
+	rs, err = stmt.Exec(title, body)
 	if err != nil {
 		return 0, err
 	}
@@ -213,7 +243,7 @@ func articlesCreateHandler(w http.ResponseWriter, r *http.Request) {
 func forceHTMLMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 1、设置表头
-		w.Header().Set("Content-Type","text/html; charset=utf-8")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		// 2、继续处理请求
 		h.ServeHTTP(w, r)
 	})
