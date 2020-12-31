@@ -8,9 +8,6 @@ import (
 // Router路由对象
 var Router *mux.Router
 
-func Initialize() {
-	Router = mux.NewRouter()
-}
 
 // Name2URL 通过路由名称来获取 URL
 func Name2URL(routeName string, pairs ...string) string {
