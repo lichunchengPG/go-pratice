@@ -121,7 +121,7 @@ func notFoundHandler(w http.ResponseWriter, r *http.Request) {
 
 func articlesShowHandler(w http.ResponseWriter, r *http.Request) {
 	// 1. 获取 URL 参数
-	id := getRouteVariables("id", r)
+	id := route.GetRouteVariables("id", r)
 
 	// 2. 读取对应的文章数据
 	article, err := getArticleByID(id)
@@ -142,7 +142,7 @@ func articlesShowHandler(w http.ResponseWriter, r *http.Request) {
 		// 4. 读取成功，显示文章
 		tmpl, err := template.New("show.gohtml").
 			Funcs(template.FuncMap{
-				"RouteName2URL" : route.RouteName2URL,
+				"Name2URL" : route.Name2URL,
 				"Int64ToString" : Int64ToString,
 		}).ParseFiles("resources/views/articles/show.gohtml")
 		checkError(err)
@@ -243,7 +243,7 @@ func articlesStoreHandler(w http.ResponseWriter, r *http.Request) {
 
 func articlesEditHandler(w http.ResponseWriter, r *http.Request)  {
 	// 1. 获取 URL参数
-	id := getRouteVariables("id", r)
+	id := route.GetRouteVariables("id", r)
 
 	// 2. 读取对应的文章数据
 	article, err := getArticleByID(id)
@@ -279,7 +279,7 @@ func articlesEditHandler(w http.ResponseWriter, r *http.Request)  {
 
 func articlesUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	// 1. 获去URL参数
-	id := getRouteVariables("id", r)
+	id := route.GetRouteVariables("id", r)
 	// 2. 读取对应的文章数据
 	_, err := getArticleByID(id)
 
@@ -396,7 +396,7 @@ func articlesCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 func articlesDeleteHandler(w http.ResponseWriter, r *http.Request)  {
 	// 1. 获取URL参数
-	id := getRouteVariables("id", r)
+	id := route.GetRouteVariables("id", r)
 	// 2. 读取对应文章数据
 	article, err := getArticleByID(id)
 
@@ -450,11 +450,6 @@ func removeTrailingSlash(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func getRouteVariables(parameterName string, r *http.Request) string {
-	vars := mux.Vars(r)
-	return vars[parameterName]
 }
 
 func getArticleByID(id string) (Article, error) {
